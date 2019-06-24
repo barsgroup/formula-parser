@@ -5,6 +5,7 @@
 \s+                                                                                             {/* skip whitespace */}
 '"'("\\"["]|[^"])*'"'                                                                           {return 'STRING';}
 "'"('\\'[']|[^'])*"'"                                                                           {return 'STRING';}
+"IF"                                                                                            {return 'IF';}
 [A-Za-z]{1,}[A-Za-z_0-9\.]+(?=[(])                                                              {return 'FUNCTION';}
 '#'[A-Z0-9\/]+('!'|'?')?                                                                        {return 'ERROR';}
 '$'[A-Za-z]+'$'[0-9]+                                                                           {return 'ABSOLUTE_CELL';}
@@ -64,57 +65,62 @@ expressions
 
 expression
   : variableSequence {
-      $$ = yy.callVariable($1[0]);
+      $$ = checkError($1[0]) || yy.callVariable($1[0]);
     }
   | number {
-      $$ = yy.toNumber($1);
+      $$ = checkError($1) || yy.toNumber($1);
     }
   | STRING {
-      $$ = yy.trimEdges($1);
+      $$ = checkError($1) || yy.trimEdges($1);
     }
   | expression '&' expression {
-      $$ = yy.evaluateByOperator('&', [$1, $3]);
+      $$ = checkError([$1, $3]) || yy.evaluateByOperator('&', [$1, $3]);
     }
   | expression '=' expression {
-      $$ = yy.evaluateByOperator('=', [$1, $3]);
+      $$ = checkError([$1, $3]) || yy.evaluateByOperator('=', [$1, $3]);
     }
   | expression '+' expression {
-      $$ = yy.evaluateByOperator('+', [$1, $3]);
+      $$ = checkError([$1, $3]) || yy.evaluateByOperator('+', [$1, $3]);
     }
   | '(' expression ')' {
-      $$ = $2;
+      $$ = checkError($2) || $2;
     }
   | expression '<' '=' expression {
-      $$ = yy.evaluateByOperator('<=', [$1, $4]);
+      $$ = checkError([$1, $4]) || yy.evaluateByOperator('<=', [$1, $4]);
     }
   | expression '>' '=' expression {
-      $$ = yy.evaluateByOperator('>=', [$1, $4]);
+      $$ = checkError([$1, $4]) || yy.evaluateByOperator('>=', [$1, $4]);
     }
   | expression '<' '>' expression {
-      $$ = yy.evaluateByOperator('<>', [$1, $4]);
+      $$ = checkError([$1, $4]) || yy.evaluateByOperator('<>', [$1, $4]);
     }
   | expression NOT expression {
-      $$ = yy.evaluateByOperator('NOT', [$1, $3]);
+      $$ = checkError([$1, $3]) || yy.evaluateByOperator('NOT', [$1, $3]);
     }
   | expression '>' expression {
-      $$ = yy.evaluateByOperator('>', [$1, $3]);
+      $$ = checkError([$1, $3]) || yy.evaluateByOperator('>', [$1, $3]);
     }
   | expression '<' expression {
-      $$ = yy.evaluateByOperator('<', [$1, $3]);
+      $$ = checkError([$1, $3]) || yy.evaluateByOperator('<', [$1, $3]);
     }
   | expression '-' expression {
-      $$ = yy.evaluateByOperator('-', [$1, $3]);
+      $$ = checkError([$1, $3]) || yy.evaluateByOperator('-', [$1, $3]);
     }
   | expression '*' expression {
-      $$ = yy.evaluateByOperator('*', [$1, $3]);
+      $$ = checkError([$1, $3]) || yy.evaluateByOperator('*', [$1, $3]);
     }
   | expression '/' expression {
-      $$ = yy.evaluateByOperator('/', [$1, $3]);
+      $$ = checkError([$1, $3]) || yy.evaluateByOperator('/', [$1, $3]);
     }
   | expression '^' expression {
-      $$ = yy.evaluateByOperator('^', [$1, $3]);
+      $$ = checkError([$1, $3]) || yy.evaluateByOperator('^', [$1, $3]);
     }
   | '-' expression {
+      var error = checkError($2);
+      if (error){
+        $$ = error;
+        return;
+      }
       var n1 = yy.invertNumber($2);
 
       $$ = n1;
@@ -124,6 +130,11 @@ expression
       }
     }
   | '+' expression {
+      var error = checkError($2);
+      if (error){
+        $$ = error;
+        return;
+      }
       var n1 = yy.toNumber($2);
 
       $$ = n1;
@@ -135,8 +146,20 @@ expression
   | FUNCTION '(' ')' {
       $$ = yy.callFunction($1);
     }
+  | IF '(' ')' {
+      $$ = yy.callFunction($1);
+    }
+  | IF '(' expseq ')' {
+        var result = $3[0] === true ? $3[1] : $3[2];
+        var error = checkError(result);
+        if (error){
+          $$ = error;
+          return;
+        }
+        $$ = yy.callFunction($1, $3);
+    }
   | FUNCTION '(' expseq ')' {
-      $$ = yy.callFunction($1, $3);
+      $$ = checkError($3) || yy.callFunction($1, $3);
     }
   | cell
   | error
@@ -228,3 +251,16 @@ error
 ;
 
 %%
+
+function checkError(args){
+    if (args instanceof Error){
+        return args;
+    } else if (Array.isArray(args)){
+        for (var i = 0; i < args.length; i++){
+            if (args[i] instanceof Error){
+                return args[i];
+            }
+        }
+    }
+    return false;
+}

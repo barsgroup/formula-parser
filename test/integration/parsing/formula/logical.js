@@ -31,6 +31,10 @@ describe('.parse() logical formulas', () => {
     expect(parser.parse('IF()')).toMatchObject({error: null, result: true});
     expect(parser.parse('IF(TRUE, 1, 2)')).toMatchObject({error: null, result: 1});
     expect(parser.parse('IF(FALSE, 1, 2)')).toMatchObject({error: null, result: 2});
+    expect(parser.parse('IF(TRUE, 1, 1/0 + 1)')).toMatchObject({error: null, result: 1});
+    expect(parser.parse('IF(FALSE, 1/0 + 1, 1)')).toMatchObject({error: null, result: 1});
+    expect(parser.parse('IF(TRUE, 1/0 + 1, 1)')).toMatchObject({error: '#DIV/0!', result: null});
+    expect(parser.parse('IF(FALSE, 1, 1/0 + 1)')).toMatchObject({error: '#DIV/0!', result: null});
   });
 
   it('NOT', () => {
